@@ -9,6 +9,8 @@ from minutes.config import Settings
 from minutes.diarization import assign_speakers, diarize
 from minutes.exports import export_docx, export_pdf
 from minutes.extraction import LocalOllama
+from minutes.gemini import model_name as gemini_model
+from minutes.gemini import transcribe_gemini
 from minutes.models import Meeting, timestamp, transcript_text
 from minutes.review import apply_action_edits
 from minutes.transcription import transcribe
@@ -18,23 +20,30 @@ st.set_page_config(
 )
 st.title("Alem Minutes")
 st.caption("Локальный протокол встречи · Қазақша / Русский")
-st.success(
-    "**On-premise.** Audio, transcript and minutes never leave this machine: speech "
-    "recognition and diarization run in local processes, and the language model is reached "
-    "only over loopback. No cloud API, no account, no telemetry.",
-    icon="🔒",
-)
-st.caption(
-    "Demo flow: upload audio → 1. Transcribe locally (speakers included) → "
-    "name the speakers → 2. Extract summary and action items → export DOCX/PDF."
-)
 try:
     settings = Settings.load()
 except ValueError as exc:
     st.error(str(exc))
     st.stop()
 
+GEMINI = "Gemini (best RU/KZ accuracy)"
+LOCAL = "Local Whisper (offline/private)"
 with st.sidebar:
+    st.header("Transcription backend")
+    backend = st.radio(
+        "Speech-to-text",
+        [GEMINI, LOCAL],
+        index=1,  # Local by default: audio is never sent to the cloud unless chosen.
+        help="Gemini sends the audio to Google's cloud API and needs GEMINI_API_KEY.",
+    )
+    use_gemini = backend == GEMINI
+    if use_gemini:
+        st.warning(
+            f"**Cloud mode.** The uploaded audio is sent to Google Gemini API "
+            f"(`{gemini_model()}`) for transcription. Requires `GEMINI_API_KEY` in `.env`. "
+            "Summary and action items are still extracted by local Ollama.",
+            icon="☁️",
+        )
     st.header("Local models")
     model = st.selectbox(
         "Whisper model",
@@ -64,8 +73,27 @@ with st.sidebar:
                 f"`ollama pull {settings.ollama_model}`."
             )
     st.info(
-        "Download models once using the README. Runtime never downloads models or calls cloud inference."
+        "Download models once using the README. Local mode never downloads models or calls "
+        "cloud inference; only the Gemini backend, if selected, uses the cloud."
     )
+
+if use_gemini:
+    st.warning(
+        "**Gemini backend selected:** audio leaves this machine and is transcribed by Google's "
+        "cloud API. Speaker labels and timestamps come from Gemini. Minutes are extracted locally.",
+        icon="☁️",
+    )
+else:
+    st.success(
+        "**On-premise.** Audio, transcript and minutes never leave this machine: speech "
+        "recognition and diarization run in local processes, and the language model is reached "
+        "only over loopback. No cloud API, no account, no telemetry.",
+        icon="🔒",
+    )
+st.caption(
+    "Demo flow: upload audio → 1. Transcribe (speakers included) → "
+    "name the speakers → 2. Extract summary and action items → export DOCX/PDF."
+)
 
 
 def run_extraction(meeting) -> None:
@@ -95,25 +123,32 @@ upload = st.file_uploader(
 if upload:
     st.audio(upload)
 
-if st.button("1. Transcribe locally", type="primary", disabled=upload is None):
+transcribe_label = "1. Transcribe with Gemini (cloud)" if use_gemini else "1. Transcribe locally"
+if st.button(transcribe_label, type="primary", disabled=upload is None):
     st.session_state.pop("meeting", None)
     if not title.strip():
         st.error("Enter a meeting title.")
     else:
         try:
-            with st.spinner("Transcribing locally. First CUDA attempt may fall back to CPU…"):
+            with st.spinner(
+                "Transcribing. Local CUDA may fall back to CPU; Gemini may take a minute…"
+            ):
                 with tempfile.TemporaryDirectory(prefix="alem-audio-") as folder:
                     audio = Path(folder) / f"recording{Path(upload.name).suffix.lower()}"
                     audio.write_bytes(upload.getvalue())
-                    transcript = transcribe(
-                        audio,
-                        settings.model_dir,
-                        model,
-                        device,
-                        {"Russian": "ru", "Kazakh": "kk"}.get(language),
-                    )
+                    if use_gemini:
+                        # Gemini returns its own speaker labels; local diarization is not mixed in.
+                        transcript = transcribe_gemini(audio)
+                    else:
+                        transcript = transcribe(
+                            audio,
+                            settings.model_dir,
+                            model,
+                            device,
+                            {"Russian": "ru", "Kazakh": "kk"}.get(language),
+                        )
                     turns = []
-                    if use_diarization and transcript.segments:
+                    if use_diarization and not use_gemini and transcript.segments:
                         try:
                             with st.spinner("Finding speaker turns locally…"):
                                 turns = diarize(audio, settings.model_dir, int(num_speakers))

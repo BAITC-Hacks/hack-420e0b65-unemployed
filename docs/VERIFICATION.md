@@ -112,3 +112,31 @@ review and hardening; the full suite was 47 tests at `91984e2`. Latest verified 
   were a deadline (it remains in the JSON export and the evidence quote).
 - `uv run pytest -q`: **80 passed** (new export test; UI test asserts the `—` cell).
   `uv run ruff check .` and `uv run ruff format --check .`: passed.
+
+## Milestone 6 — optional Gemini transcription backend (approximately 17:05 Astana)
+
+- New `minutes/gemini.py` + sidebar choice *Gemini (best RU/KZ accuracy)* /
+  *Local Whisper (offline/private)*; Local is the default, Gemini must be selected.
+- Model availability checked with the Gemini `models` list endpoint.
+  `gemini-3.5-transcribe` was tried on `assets/demo/planning-ru-kk.wav` and rejected:
+  400 “JSON mode is not enabled for this model”; without JSON it returned one plain text
+  block with no speakers or timestamps and **omitted the Kazakh lines**.
+- `gemini-3.5-flash` (default) on the same demo file, real call: 6 segments, 3 speakers,
+  coherent timestamps, correct Kazakh (“Жарайды, мен мердігермен осы аптаның соңына дейін
+  байланысамын”) and the code-switched line intact. Numbers were written as words.
+- That Gemini transcript → local Qwen extraction → DOCX/PDF, run twice: 4 actions each
+  time, deadlines 2026-09-25, 2026-09-25 (“до конца недели”), 2026-09-28
+  (“в понедельник”) and “—” for the budget task. One earlier extraction attempt on it
+  failed the verbatim-quote check after 3 repairs; quote comparison now also ignores
+  case, ё/е and dash/quote style. The final end-to-end runs used a transcript
+  reconstructed from the recorded Gemini output because Gemini then returned
+  `503 high demand` on every retry.
+- `uv run pytest -q`: **90 passed** (mocked Gemini tests: parsing, speaker mapping,
+  incoherent timestamps, truncation, blocked output, missing key before any I/O,
+  key only in header and never in errors, 503 retry, network failure; UI test that Local
+  is default and Gemini shows the cloud warning). No test calls the real API.
+  `uv run ruff check .` passed.
+- AttributeError `'ActionItem' object has no attribute 'display_deadline'`: the running
+  Streamlit process had started (16:26) before that method was added and still held the
+  old `minutes.models` module. A fresh `uv run streamlit run app.py` on port 8599
+  started cleanly (health `ok`, HTTP 200).

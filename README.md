@@ -4,8 +4,13 @@ HackAlem AI 2026, team **Unemployed**.
 
 Upload a meeting recording, and the machine you are sitting at does everything:
 speech recognition, speaker diarization, action-item extraction and the final
-protocol document. **No audio and no text ever leave the host.** There is no cloud
-API, no account, no API key and no telemetry.
+protocol document. In the default **Local Whisper (offline/private)** mode **no audio
+and no text ever leave the host**: no cloud API, no account, no API key, no telemetry.
+
+An optional, explicitly selected **Gemini (best RU/KZ accuracy)** transcription backend
+sends the *audio* to Google's Gemini API (cloud) and needs `GEMINI_API_KEY`; see
+[§3a](#3a-optional-cloud-transcription-gemini). In that mode the application is **not**
+offline. Summary and action items are still extracted by the local Ollama model.
 
 ---
 
@@ -36,7 +41,7 @@ API, no account, no API key and no telemetry.
 | 5 | Action items with responsible + task + deadline | `minutes/extraction.py`, `ActionItem` in `minutes/models.py` | `uv run python scripts/verify_extraction.py` | 7 `PASS` lines (RU/KZ/mixed explicit date `2026-09-25`; “в понедельник” → `2026-09-28`, “в среду” → `2026-09-30`, “на следующей неделе” → `2026-10-02`, “жұмаға дейін” → `2026-09-25`, meeting date Wed `2026-09-23`): one action each, person `Айгүл`, speaker link, verbatim quote |
 | 6 | Speaker diarization linked to people | `minutes/diarization.py` + “Who is speaking?” form in `app.py` | `… --diarize`, then map names in the UI | `Diarization: N turns, M speakers`; mapped names replace labels in transcript, actions and exports |
 | 7 | Export protocol to PDF/DOCX | `minutes/exports.py` | `uv run pytest -q tests/test_exports.py` and the export buttons | `.docx`/`.pdf` containing summary, action table, evidence and transcript |
-| — | Fully local / on-premise | `minutes/config.py` (loopback-only), isolated workers, `local_files_only=True` | `uv run pytest -q tests/test_core.py tests/test_extraction.py` | External URLs, proxies, redirects and remote/cloud Ollama models are rejected before any meeting text is sent |
+| — | Fully local / on-premise (Local Whisper mode) | `minutes/config.py` (loopback-only), isolated workers, `local_files_only=True` | `uv run pytest -q tests/test_core.py tests/test_extraction.py` | External URLs, proxies, redirects and remote/cloud Ollama models are rejected before any meeting text is sent |
 
 ---
 
@@ -61,7 +66,8 @@ API, no account, no API key and no telemetry.
             │        │                                                      │
             │        └──▶ exports.py → DOCX / PDF / TXT / JSON (in memory)   │
             └──────────────────────────────────────────────────────────────┘
-                         no outbound network calls at runtime
+      no outbound network calls at runtime in Local Whisper mode (the default);
+      the optional Gemini backend sends audio to generativelanguage.googleapis.com
 ```
 
 | File | Responsibility |
@@ -71,6 +77,7 @@ API, no account, no API key and no telemetry.
 | `minutes/transcription.py` | Isolated Whisper worker, CUDA→CPU fallback, per-passage decoding, audio-decode errors |
 | `minutes/diarization.py` | Isolated sherpa-onnx worker and timestamp-overlap speaker attribution |
 | `minutes/extraction.py` | Local-model boundary, JSON-schema output, malformed-output recovery, evidence validation, chunking |
+| `minutes/gemini.py` | Optional cloud Gemini transcription (explicit opt-in), response parsing to `Transcript` |
 | `minutes/deadlines.py` | Deterministic RU/KZ relative-deadline resolution from the meeting date |
 | `minutes/review.py` | Validated human edits of the action table |
 | `minutes/exports.py` | DOCX and Unicode PDF generation with bundled fonts |
@@ -83,7 +90,45 @@ cannot take down the UI.
 
 ---
 
-## 3. On-premise / privacy design
+## 3a. Optional cloud transcription (Gemini)
+
+Why: on real human RU/KZ recordings, local Whisper was noticeably weaker than Gemini,
+especially for Kazakh and code-switching. Local mode stays the default and fully works
+without Gemini.
+
+Setup (only if you want this mode):
+
+```bash
+cp .env.example .env          # if you have no .env yet; .env is git-ignored
+# edit .env and set your own key from https://aistudio.google.com/apikey :
+# GEMINI_API_KEY=<your key>
+# GEMINI_MODEL=gemini-3.5-flash   # optional, this is the default
+```
+
+Then restart Streamlit and choose **Gemini (best RU/KZ accuracy)** under
+*Transcription backend* in the sidebar. The button changes to
+**1. Transcribe with Gemini (cloud)** and a cloud warning is shown.
+
+How it works (`minutes/gemini.py`): the upload is decoded locally to 16 kHz mono WAV and
+sent via the official Gemini REST API (`generateContent`, inline for ≤14 MB, otherwise the
+Files API, and the uploaded file is deleted afterwards). Gemini is instructed to transcribe
+verbatim without translating or summarising, keep RU/KZ code-switching, and return JSON
+segments with speaker and start/end seconds. They are converted into the same
+`Transcript`/`Segment` structure (`Speaker 1` → `SPEAKER_00`, …), so speaker naming,
+extraction, deadlines, review and DOCX/PDF/JSON exports are unchanged. Local ONNX
+diarization is not applied in this mode. Timestamps are kept only if they are coherent
+(ordered, inside the recording); otherwise they are shown as 00:00:00 with a warning
+rather than invented. 429/5xx responses are retried twice. Missing key, API errors and
+network failures are shown as clean messages; the key is sent only in the
+`x-goog-api-key` header and never logged or shown.
+
+Privacy trade-off: **Gemini mode = the recording goes to Google** under your API key's
+terms. Use Local Whisper for confidential meetings.
+
+`gemini-3.5-transcribe` was tried first and rejected: it does not support JSON mode, returned
+no speakers/timestamps, and dropped the Kazakh lines of the demo recording.
+
+## 3. On-premise / privacy design (Local Whisper mode)
 
 * **Loopback-only LLM.** `minutes/config.py::local_ollama_url` accepts only
   `http://127.0.0.1`, `http://localhost` or `http://[::1]` with no path, query,
@@ -272,8 +317,8 @@ exported JSON, so a fallback is never silent.
 
 ## 12. Environment variables
 
-All values are optional; defaults work. No secrets are used anywhere. See
-[`.env.example`](.env.example).
+All values are optional; defaults work. The only secret is the optional
+`GEMINI_API_KEY` (Gemini mode only). See [`.env.example`](.env.example).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -282,10 +327,18 @@ All values are optional; defaults work. No secrets are used anywhere. See
 | `WHISPER_MODEL` | `large-v3` | Default Whisper model directory under `MODEL_DIR/whisper/` |
 | `WHISPER_DEVICE` | `auto` | `auto`, `cuda` or `cpu` |
 | `MODEL_DIR` | `models` | Root of downloaded model files |
+| `GEMINI_API_KEY` | *(empty)* | Only for the optional cloud Gemini backend; keep it in `.env` (git-ignored) |
+| `GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model used by the cloud backend |
 
 ---
 
 ## 13. Known limitations
+
+* **Gemini mode is cloud processing** and depends on Google's availability: during
+  testing `gemini-3.5-flash` intermittently returned `503 high demand` even after retries.
+  Gemini speaker labels and timestamps are model estimates. Gemini may write numbers as
+  words (“к двадцать пятому сентября”). Very long recordings can exceed the output limit
+  (reported as “truncated”).
 
 * **Recognition quality is not perfect**, especially for Kazakh. A measured example
   is recorded in `docs/VERIFICATION.md` (“Әлемнің жұлдыздары” → “Әлімнің

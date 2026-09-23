@@ -77,3 +77,15 @@ def test_action_dashboard_and_exports_render_with_unspecified_deadline():
     next(button for button in app.button if button.label == "Save action updates").click().run()
     assert not app.exception
     assert app.session_state["meeting"].extraction.action_items[0].deadline is None
+
+
+def test_local_backend_is_default_and_gemini_needs_explicit_choice():
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.run(timeout=20)
+    assert not app.exception
+    assert app.radio[0].value.startswith("Local Whisper")
+    assert any("On-premise" in s.value for s in app.success)
+    app.radio[0].set_value("Gemini (best RU/KZ accuracy)").run(timeout=20)
+    assert not app.exception
+    assert any("Google" in w.value for w in app.warning)
+    assert any(b.label == "1. Transcribe with Gemini (cloud)" for b in app.button)

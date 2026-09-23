@@ -70,7 +70,10 @@ def parse_extraction(raw: str) -> Extraction:
 
 
 def normalize(text: str) -> str:
-    """Compare quotes without punishing whitespace differences the model may introduce."""
+    """Compare quotes without punishing whitespace, case, ё/е or dash/quote-style differences."""
+    text = text.casefold().replace("ё", "е")
+    text = re.sub(r"[‐‑‒–—―]", "-", text)
+    text = re.sub(r"[«»“”„\"]", '"', text)
     return re.sub(r"\s+", " ", text).strip()
 
 
