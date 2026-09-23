@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from minutes.config import Settings
 from minutes.diarization import assign_speakers, diarize
+from minutes.exports import export_docx, export_pdf
 from minutes.extraction import LocalOllama
 from minutes.models import Meeting
 from minutes.transcription import transcribe
@@ -52,6 +53,8 @@ def main():
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(meeting.model_dump_json(indent=2), encoding="utf-8")
+    args.output.with_suffix(".docx").write_bytes(export_docx(meeting))
+    args.output.with_suffix(".pdf").write_bytes(export_pdf(meeting))
     print(f"LLM: validated summary and {len(result.action_items)} actions; saved to {args.output}")
 
 

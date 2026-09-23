@@ -39,3 +39,40 @@ def test_mapping_updates_transcript_and_invalidates_old_minutes():
     assert updated.speaker_names == {"SPEAKER_00": "Айгүл"}
     assert updated.extraction is None
     assert "Айгүл" in app.text_area[0].value
+
+
+def test_action_dashboard_and_exports_render_with_unspecified_deadline():
+    from datetime import date
+
+    from minutes.models import ActionItem, Extraction, Meeting, Segment, Transcript
+
+    action = ActionItem(
+        task="Проверить отчёт",
+        responsible=None,
+        responsible_speaker=None,
+        deadline=None,
+        deadline_text=None,
+        evidence_segment_ids=[0],
+        evidence_quote="Проверить отчёт",
+    )
+    meeting = Meeting(
+        title="Тест",
+        meeting_date=date(2026, 9, 23),
+        transcript=Transcript(
+            segments=[Segment(id=0, start=0, end=2, text="Проверить отчёт")],
+            language="ru",
+            duration=2,
+            device="cpu",
+            model="test fixture",
+        ),
+        extraction=Extraction(summary="Проверка отчёта", action_items=[action]),
+    )
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.session_state["meeting"] = meeting
+    app.run(timeout=20)
+    assert not app.exception
+    assert len(app.metric) == 3
+    assert len(app.get("download_button")) == 4
+    next(button for button in app.button if button.label == "Save action updates").click().run()
+    assert not app.exception
+    assert app.session_state["meeting"].extraction.action_items[0].deadline is None

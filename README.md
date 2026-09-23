@@ -9,7 +9,7 @@ on representative recordings. No cloud inference or personal accounts required.
 
 Streamlit upload, timestamped faster-whisper STT, real sherpa-onnx speaker
 diarization, participant-name mapping, validated Ollama extraction with retries,
-transcript/JSON downloads. Document export is the next milestone.
+editable actions/status dashboard, and transcript/JSON/DOCX/PDF downloads.
 Actual verification results will be recorded in `docs/VERIFICATION.md`.
 
 ## Setup — Ubuntu / WSL2
@@ -49,7 +49,10 @@ It exits before Ollama runs, freeing its GPU memory.
 5. Click **2. Extract summary and action items**. Expect summary and action table
    with source quotes/IDs. Missing people/deadlines stay unspecified. No tasks is
    a valid result. Review every AI draft against audio.
-6. Download transcript or JSON. Clear meeting from the session when finished.
+6. Review actions and update progress. Mark completed tasks; overdue is computed
+   from the due date and machine's current date. Edits apply to exports.
+7. Download DOCX/PDF (summary, action table, evidence and timestamped transcript),
+   transcript or JSON. Clear meeting from the session when finished.
 
 For a spoken test, record “Айгуль, подготовь отчёт к 25 сентября 2026 года.
 Хорошо, я подготовлю отчёт к 25 сентября 2026 года.” Check the transcription,
@@ -71,6 +74,7 @@ word/timestamp-overlap speaker assignment → participant mapping → typed Tran
 `minutes/models.py`: Pydantic contracts; `transcription.py`: local STT worker;
 `extraction.py`: local LLM/schema/evidence boundary; `config.py`: settings;
 `diarization.py`: local segmentation/embedding and speaker attribution;
+`exports.py`: in-memory DOCX/PDF with bundled Unicode fonts; `review.py`: validated edits;
 `app.py`: UI. Future conferencing adapters can feed audio into these same modules.
 Teams/Zoom/Meet integrations are not implemented.
 
@@ -94,7 +98,8 @@ OLLAMA_MODEL. No secrets needed. Initial model downloads are explicit setup step
 - Language detection does not prove mixed-language transcription quality.
 - Speaker diarization can merge/split voices and struggle with cross-talk. Mapping
   names is a human review step. Changing mappings clears old minutes for regeneration.
-- PDF/DOCX export is not implemented yet.
+- Dashboard edits are session-local. Download JSON/DOCX/PDF to retain the result;
+  there is no persistent shared task database or external task-system integration.
 
 ## Third-party disclosure
 
@@ -114,6 +119,8 @@ are third-party materials. Exact dependency versions are in `uv.lock`.
 | sherpa-onnx and native runtime | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |
 | pyannote segmentation 3.0 ONNX | [Public release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-segmentation-models) | MIT, CNRS; LICENSE included in downloaded archive |
 | 3D-Speaker ERes2Net embedding | [3D-Speaker](https://github.com/modelscope/3D-Speaker), [ONNX release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) | Apache-2.0 |
+| python-docx / ReportLab | [python-docx](https://github.com/python-openxml/python-docx) / [ReportLab](https://www.reportlab.com/) | MIT / BSD |
+| Bundled DejaVu Sans fonts | [DejaVu](https://dejavu-fonts.github.io/) | Bitstream Vera license; DejaVu changes public domain; see `assets/fonts/LICENSE.txt` |
 
 See `docs/BRIEF.md` for requirements/scoring map. Respect component/model licenses
 when redistributing the application and its downloaded dependencies.

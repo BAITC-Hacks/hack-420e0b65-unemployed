@@ -50,3 +50,20 @@ crash; actual CPU inference is still pending. No document exports yet.
 
 Model files stay ignored. Whisper weights are pinned by upstream commit and SHA-256;
 diarization release artifacts are pinned by SHA-256 in the download script.
+
+## Milestone 3 (approximately 15:25 Astana)
+
+- Full suite: **31 passed**, including actual DOCX XML content, PDF text extraction
+  for Russian and all nine Kazakh-specific letters, a 100-segment multipage PDF,
+  action review validation and Streamlit dashboard/export rendering (including
+  a task with an unknown deadline). Ruff and Python compilation passed.
+- Real Kazakh audio → large-v3 CUDA → real diarization → local Qwen → DOCX/PDF/JSON:
+  completed using `scripts/smoke.py artifacts/kazakh-public-sample.mp3 --model
+  large-v3 --language kk --diarize --output artifacts/kazakh-smoke.json`.
+- Source: [public Kazakh Piper/ISSAI synthetic speech sample, speaker 0](https://k2-fsa.github.io/sherpa/onnx/tts/all/Kazakh/vits-piper-kk_KZ-issai-high.html).
+  This is externally published test audio downloaded for testing; no application
+  audio/text was sent out. It is not a human meeting benchmark.
+- Recognition limitation observed: reference “Әлемнің жұлдыздары сенің көзің,
+  жаным.” was transcribed “Әлімнің жолдыздары сенің көзің жаным.” Two words differ;
+  **do not claim perfect Kazakh recognition**. The sample contains no commitments;
+  zero extracted actions is expected. Human review remains necessary.

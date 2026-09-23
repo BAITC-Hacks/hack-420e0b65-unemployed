@@ -12,3 +12,5 @@ artifacts/
 *.egg-info/
 dist/
 build/
+
+:memory:.ses

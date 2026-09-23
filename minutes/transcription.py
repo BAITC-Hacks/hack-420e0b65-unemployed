@@ -21,8 +21,12 @@ def transcribe(
     language: str | None = None,
 ) -> Transcript:
     model_path = model_dir / "whisper" / model
-    if not (model_path / "model.bin").is_file():
-        raise ValueError(f"Whisper model missing: {model_path}. Run scripts/download_models.py.")
+    if not all(
+        (model_path / name).is_file() for name in ("model.bin", "config.json", "tokenizer.json")
+    ):
+        raise ValueError(
+            f"Whisper model missing or incomplete: {model_path}. Run scripts/download_models.py."
+        )
     if device not in {"auto", "cuda", "cpu"}:
         raise ValueError("Device must be auto, cuda or cpu")
     devices = ["cuda", "cpu"] if device in {"auto", "cuda"} else ["cpu"]
@@ -74,9 +78,63 @@ def transcribe(
     raise RuntimeError("No transcription backend available")
 
 
-def worker(audio: str, model: str, device: str, language: str | None) -> Transcript:
-    from faster_whisper import WhisperModel
+def recognize_regions(engine, samples, regions: list[dict], language: str | None):
+    rows, languages = [], []
+    for region in regions:
+        offset = region["start"] / 16000
+        segments, info = engine.transcribe(
+            samples[region["start"] : region["end"]],
+            language=language,
+            beam_size=5,
+            vad_filter=False,
+            word_timestamps=True,
+            condition_on_previous_text=False,
+            multilingual=language is None,
+        )
+        if info.language not in languages:
+            languages.append(info.language)
+        for segment in segments:
+            if segment.text.strip():
+                rows.append(
+                    Segment(
+                        id=len(rows),
+                        start=segment.start + offset,
+                        end=segment.end + offset,
+                        text=segment.text,
+                        words=[
+                            Word(start=word.start + offset, end=word.end + offset, text=word.word)
+                            for word in (segment.words or [])
+                        ],
+                    )
+                )
+    return rows, languages
 
+
+def worker(audio: str, model: str, device: str, language: str | None) -> Transcript:
+    import onnxruntime
+    from faster_whisper import WhisperModel
+    from faster_whisper.audio import decode_audio
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+    onnxruntime.disable_telemetry_events()
+    samples = decode_audio(audio, sampling_rate=16000)
+    duration = len(samples) / 16000
+    if duration > 7200:
+        raise ValueError("Recording exceeds the two-hour limit; split it into shorter meetings")
+    # Decode separate voiced passages: concatenating them into one 30-second window
+    # caused a Russian passage to suppress a following Kazakh passage in real testing.
+    regions = get_speech_timestamps(
+        samples,
+        VadOptions(
+            min_silence_duration_ms=350,
+            speech_pad_ms=200,
+            max_speech_duration_s=25,
+        ),
+    )
+    if not regions:
+        return Transcript(
+            segments=[], language=language or "und", duration=duration, device=device, model=model
+        )
     engine = WhisperModel(
         model,
         device=device,
@@ -84,33 +142,13 @@ def worker(audio: str, model: str, device: str, language: str | None) -> Transcr
         local_files_only=True,
         cpu_threads=min(8, os.cpu_count() or 4),
     )
-    segments, info = engine.transcribe(
-        audio,
-        language=language,
-        beam_size=5,
-        vad_filter=True,
-        word_timestamps=True,
-        condition_on_previous_text=False,
-        multilingual=language is None,
-    )
-    rows = []
-    for s in segments:
-        if s.text.strip():
-            rows.append(
-                Segment(
-                    id=len(rows),
-                    start=s.start,
-                    end=s.end,
-                    text=s.text,
-                    words=[Word(start=w.start, end=w.end, text=w.word) for w in (s.words or [])],
-                )
-            )
+    rows, languages = recognize_regions(engine, samples, regions, language)
     del engine
     gc.collect()
     return Transcript(
         segments=rows,
-        language=info.language,
-        duration=info.duration,
+        language="+".join(languages),
+        duration=duration,
         device=device,
         model=model,
     )

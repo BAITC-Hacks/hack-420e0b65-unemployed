@@ -7,8 +7,10 @@ import streamlit as st
 
 from minutes.config import Settings
 from minutes.diarization import assign_speakers, diarize
+from minutes.exports import export_docx, export_pdf
 from minutes.extraction import LocalOllama
 from minutes.models import Meeting, timestamp, transcript_text
+from minutes.review import apply_action_edits
 from minutes.transcription import transcribe
 
 st.set_page_config(
@@ -143,6 +145,7 @@ if meeting:
                     meeting.speaker_names,
                 )
                 meeting.extraction = result
+                st.session_state["editor_revision"] = st.session_state.get("editor_revision", 0) + 1
         except (httpx.HTTPError, ValueError, OSError) as exc:
             st.error(f"Extraction failed; transcript is preserved. {exc}")
     if meeting.extraction:
@@ -163,8 +166,64 @@ if meeting:
         ]
         if rows:
             st.dataframe(rows, width="stretch", hide_index=True)
+            statuses = [a.display_status() for a in meeting.extraction.action_items]
+            for column, label in zip(st.columns(3), ["in progress", "overdue", "completed"]):
+                column.metric(label.title(), statuses.count(label))
+            with st.expander("Review actions and update progress"):
+                st.caption(
+                    "Overdue is calculated from the date. Edits are included in all exports."
+                )
+                with st.form("review_actions"):
+                    editable = [
+                        {
+                            "Responsible": a.responsible or "",
+                            "Task": a.task,
+                            "Deadline": a.deadline,
+                            "Status": a.status,
+                        }
+                        for a in meeting.extraction.action_items
+                    ]
+                    edits = st.data_editor(
+                        editable,
+                        hide_index=True,
+                        width="stretch",
+                        num_rows="fixed",
+                        key=f"actions_{st.session_state.get('editor_revision', 0)}",
+                        column_config={
+                            "Deadline": st.column_config.DateColumn(format="YYYY-MM-DD"),
+                            "Status": st.column_config.SelectboxColumn(
+                                options=["in progress", "completed"], required=True
+                            ),
+                            "Task": st.column_config.TextColumn(required=True),
+                        },
+                    )
+                    if st.form_submit_button("Save action updates"):
+                        try:
+                            meeting.extraction.action_items = apply_action_edits(
+                                meeting.extraction.action_items, edits
+                            )
+                            st.session_state["editor_revision"] = (
+                                st.session_state.get("editor_revision", 0) + 1
+                            )
+                            st.rerun()
+                        except (ValueError, TypeError) as exc:
+                            st.error(f"Invalid edit: {exc}")
         else:
             st.info("No explicit action items found.")
+        st.subheader("Export protocol")
+        try:
+            docx_column, pdf_column = st.columns(2)
+            docx_column.download_button(
+                "Download DOCX",
+                export_docx(meeting),
+                "meeting-protocol.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            pdf_column.download_button(
+                "Download PDF", export_pdf(meeting), "meeting-protocol.pdf", "application/pdf"
+            )
+        except (ValueError, OSError) as exc:
+            st.error(f"Document export failed; JSON and transcript remain available. {exc}")
         st.download_button(
             "Download protocol JSON",
             meeting.model_dump_json(indent=2),
