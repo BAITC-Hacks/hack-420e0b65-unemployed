@@ -131,7 +131,7 @@ review and hardening; the full suite was 47 tests at `91984e2`. Latest verified 
   case, ё/е and dash/quote style. The final end-to-end runs used a transcript
   reconstructed from the recorded Gemini output because Gemini then returned
   `503 high demand` on every retry.
-- `uv run pytest -q`: **90 passed** (mocked Gemini tests: parsing, speaker mapping,
+- `uv run pytest -q`: **91 passed** (quote normalization test; mocked Gemini tests: parsing, speaker mapping,
   incoherent timestamps, truncation, blocked output, missing key before any I/O,
   key only in header and never in errors, 503 retry, network failure; UI test that Local
   is default and Gemini shows the cloud warning). No test calls the real API.
