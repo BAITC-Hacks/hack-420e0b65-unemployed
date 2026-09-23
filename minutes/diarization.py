@@ -19,9 +19,24 @@ def best_speaker(start: float, end: float, turns: list[SpeakerTurn]) -> str | No
             overlaps[turn.speaker] += overlap
     ranked = sorted(overlaps.items(), key=lambda item: item[1], reverse=True)
     if not ranked:
-        return None
+        return nearest_speaker(start, end, turns)
     if len(ranked) > 1 and abs(ranked[0][1] - ranked[1][1]) < 0.001:
         return None  # Simultaneous voices cannot be resolved reliably by timestamp overlap.
+    return ranked[0][0]
+
+
+def nearest_speaker(
+    start: float, end: float, turns: list[SpeakerTurn], tolerance: float = 0.3
+) -> str | None:
+    """Words in a short pause between turns belong to the adjacent turn, if unambiguous."""
+    gaps: dict[str, float] = {}
+    for turn in turns:
+        gap = max(turn.start - end, start - turn.end)
+        if gap <= tolerance:
+            gaps[turn.speaker] = min(gap, gaps.get(turn.speaker, gap))
+    ranked = sorted(gaps.items(), key=lambda item: item[1])
+    if not ranked or (len(ranked) > 1 and abs(ranked[0][1] - ranked[1][1]) < 0.05):
+        return None  # Equidistant from two speakers: keep unknown instead of guessing.
     return ranked[0][0]
 
 

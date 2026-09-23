@@ -33,7 +33,7 @@ API, no account, no API key and no telemetry.
 | 2 | Russian speech | same, `language="ru"` or auto | `… --language ru` on a Russian recording | Russian text in `transcript.segments[].text` |
 | 3 | Kazakh speech | same, `language="kk"` or auto | `… --language kk` on a Kazakh recording | Kazakh text, including `ә ғ қ ң ө ұ ү h і` |
 | 4 | Mixed Russian/Kazakh | per-passage decoding + `multilingual=True` | `… ` with **no** `--language` on the demo file | `language=ru+kk`; Russian and Kazakh segments in one transcript |
-| 5 | Action items with responsible + task + deadline | `minutes/extraction.py`, `ActionItem` in `minutes/models.py` | `uv run python scripts/verify_extraction.py` | `PASS Russian/Kazakh/Mixed`: one action each, person `Айгүл`, deadline `2026-09-25`, speaker link, verbatim quote |
+| 5 | Action items with responsible + task + deadline | `minutes/extraction.py`, `ActionItem` in `minutes/models.py` | `uv run python scripts/verify_extraction.py` | 7 `PASS` lines (RU/KZ/mixed explicit date `2026-09-25`; “в понедельник” → `2026-09-28`, “в среду” → `2026-09-30`, “на следующей неделе” → `2026-10-02`, “жұмаға дейін” → `2026-09-25`, meeting date Wed `2026-09-23`): one action each, person `Айгүл`, speaker link, verbatim quote |
 | 6 | Speaker diarization linked to people | `minutes/diarization.py` + “Who is speaking?” form in `app.py` | `… --diarize`, then map names in the UI | `Diarization: N turns, M speakers`; mapped names replace labels in transcript, actions and exports |
 | 7 | Export protocol to PDF/DOCX | `minutes/exports.py` | `uv run pytest -q tests/test_exports.py` and the export buttons | `.docx`/`.pdf` containing summary, action table, evidence and transcript |
 | — | Fully local / on-premise | `minutes/config.py` (loopback-only), isolated workers, `local_files_only=True` | `uv run pytest -q tests/test_core.py tests/test_extraction.py` | External URLs, proxies, redirects and remote/cloud Ollama models are rejected before any meeting text is sent |
@@ -71,6 +71,7 @@ API, no account, no API key and no telemetry.
 | `minutes/transcription.py` | Isolated Whisper worker, CUDA→CPU fallback, per-passage decoding, audio-decode errors |
 | `minutes/diarization.py` | Isolated sherpa-onnx worker and timestamp-overlap speaker attribution |
 | `minutes/extraction.py` | Local-model boundary, JSON-schema output, malformed-output recovery, evidence validation, chunking |
+| `minutes/deadlines.py` | Deterministic RU/KZ relative-deadline resolution from the meeting date |
 | `minutes/review.py` | Validated human edits of the action table |
 | `minutes/exports.py` | DOCX and Unicode PDF generation with bundled fonts |
 | `app.py` | Streamlit UI: upload → transcribe → name speakers → extract → review → export |
@@ -296,10 +297,18 @@ All values are optional; defaults work. No secrets are used anywhere. See
   summaries are concatenated; a commitment split across a chunk boundary may lose
   context. The stored summary is capped at 6000 characters.
 * Diarization can merge similar voices or split one speaker; equally overlapping
-  voices are deliberately left `UNKNOWN` rather than guessed. Speaker labels are
+  voices are deliberately left `UNKNOWN` rather than guessed. Words in a short
+  pause (≤0.3 s) between turns join the nearer turn. A task is linked to a speaker
+  only if that speaker voiced a cited evidence segment; otherwise the speaker link
+  is dropped (an explicitly named assignee is kept). Speaker labels are
   voice clusters — the human mapping step is what links them to real people.
-* Relative deadlines (“завтра”, “osы аптаның соңына дейін”) are resolved by the
-  local LLM from the meeting date you enter; verify them.
+* Relative deadlines are resolved **in code** (`minutes/deadlines.py`) from the
+  meeting date you enter: weekdays (“в понедельник”, “до пятницы”, “жұмаға дейін”;
+  the same weekday as the meeting means next week), “в следующий …”, “завтра /
+  ертең”, “послезавтра”, “через неделю”. A range such as “на следующей неделе /
+  келесі аптада” is set to the **Friday** of that week (the spoken words stay in
+  the deadline text). Other wording (e.g. “в конце месяца”) is left to the LLM,
+  which is told to return no date when unsure; verify deadlines in review.
 * Session state only. There is no database, no multi-user support, no
   authentication and no task-tracker integration — export DOCX/PDF/JSON to keep
   results.

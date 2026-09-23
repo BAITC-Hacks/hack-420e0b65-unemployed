@@ -67,3 +67,40 @@ diarization release artifacts are pinned by SHA-256 in the download script.
   жаным.” was transcribed “Әлімнің жолдыздары сенің көзің жаным.” Two words differ;
   **do not claim perfect Kazakh recognition**. The sample contains no commitments;
   zero extracted actions is expected. Human review remains necessary.
+
+## Milestone 4 — relative deadlines and speaker attribution (approximately 16:20 Astana)
+
+Commits before this entry (`62998eb` … `91984e2`) added diarization, exports,
+review and hardening; the full suite was 47 tests at `91984e2`. Latest verified run:
+
+- `uv run pytest -q`: **79 passed** (32 new in `tests/test_deadlines.py`).
+  `uv run ruff check .` and `uv run ruff format --check .`: passed.
+- Relative deadlines are now resolved deterministically in `minutes/deadlines.py`
+  from the meeting date (the local model was previously the only weekday counter).
+  Unit-tested for meeting date Wednesday 2026-09-23: “в понедельник” → 09-28,
+  “в среду” → 09-30 (same weekday = next week), “в эту среду” → 09-23,
+  “в следующую пятницу” → 10-02, “на следующей неделе” → 10-02 (Friday of that
+  week), “до конца недели” / “осы аптаның соңына дейін” → 09-25, “завтра” / “ертең”,
+  “послезавтра”, “через неделю”, “жұмаға дейін”, “дүйсенбіге дейін”, “келесі аптада”.
+  Absolute dates (“25 сентября”) stay with the model; “в среде разработки” is not
+  treated as Wednesday.
+- Speaker attribution: a task keeps `responsible_speaker` only if that speaker voiced a
+  cited evidence segment; a link to the adjacent speaker (e.g. the one who asked the
+  question) is dropped, and a label-only assignee is cleared, while an explicitly named
+  assignee is kept. Words in a ≤0.3 s pause between diarization turns now join the
+  nearer turn instead of becoming `UNKNOWN` fragments; equidistant words stay unknown.
+  Covered by unit tests with adjacent, overlapping and gap turns.
+- `uv run python scripts/verify_extraction.py` (real local Qwen
+  `qwen3:4b-instruct-2507-q4_K_M`, meeting date 2026-09-23): **7 PASS** — Russian,
+  Kazakh, mixed explicit date → 2026-09-25; “в понедельник” → 2026-09-28; “в среду”
+  → 2026-09-30; “на следующей неделе” → 2026-10-02; “жұмаға дейін” → 2026-09-25.
+- `uv run python scripts/smoke.py assets/demo/planning-ru-kk.wav --model large-v3
+  --diarize --output artifacts/final-demo.json`: 8 segments, CUDA, `ru+kk`, 7 turns /
+  3 speakers, 5 validated actions. Deadlines: “к 25 сентября 2026 года” → 09-25
+  (SPEAKER_01), “до конца недели” → 09-25 (assigned by name, no speaker link),
+  “осаптаның соңына дейін” → 09-25 (SPEAKER_02), “в понедельник” → 09-28 (SPEAKER_01),
+  one Kazakh budget task without a deadline.
+- Observed imperfection on the synthetic demo: ASR garbles some Kazakh words
+  (“Жарайды, мен” → “Жар айтмейін”) and the model then used “Жар” as a responsible
+  name for SPEAKER_02 before names were mapped. Mapping speaker names in the UI
+  replaces it; human review remains required.

@@ -8,6 +8,7 @@ import httpx
 from pydantic import ValidationError
 
 from minutes.config import local_ollama_url
+from minutes.deadlines import find_deadline_phrase, resolve_deadline
 from minutes.models import Extraction, Segment, Transcript, transcript_text
 
 SYSTEM = """You extract meeting minutes from Russian, Kazakh or mixed Russian/Kazakh speech.
@@ -73,22 +74,46 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def validate_evidence(value: Extraction, segments: list[Segment], names: dict[str, str]):
+def validate_evidence(
+    value: Extraction,
+    segments: list[Segment],
+    names: dict[str, str],
+    meeting_date: date | None = None,
+):
     indexed = {s.id: s for s in segments}
     speakers = {s.speaker for s in segments if s.speaker}
     for item in value.action_items:
         if any(i not in indexed for i in item.evidence_segment_ids):
             raise ValueError("Action cites an unknown segment ID")
-        sources = [normalize(indexed[i].text) for i in item.evidence_segment_ids]
+        cited = [indexed[i] for i in item.evidence_segment_ids]
+        sources = [normalize(s.text) for s in cited]
         quote = normalize(item.evidence_quote)
         if not any(quote in text for text in sources):
             raise ValueError("Action evidence_quote must be verbatim in a cited segment")
         if item.responsible_speaker and item.responsible_speaker not in speakers:
             raise ValueError("Action references an unknown speaker")
+        if item.responsible_speaker and item.responsible_speaker not in {s.speaker for s in cited}:
+            # A speaker only owns a task they voiced themselves; with adjacent or overlapping
+            # turns the model may credit the neighbouring speaker. Drop that link rather than
+            # assign the task to the wrong person; an explicitly named assignee is kept.
+            wrong = item.responsible_speaker
+            item.responsible_speaker = None
+            label_only = item.responsible in {wrong, names.get(wrong)}
+            if (
+                label_only
+                and item.responsible
+                and not any(item.responsible.casefold() in s.text.casefold() for s in cited)
+            ):
+                item.responsible = None
         if item.responsible_speaker:
             item.responsible = names.get(item.responsible_speaker) or (
                 item.responsible or item.responsible_speaker
             )
+        if meeting_date:
+            if not item.deadline_text and not item.deadline:
+                item.deadline_text = find_deadline_phrase(" ".join(sources), meeting_date)
+            # Code, not the model, counts weekdays for relative wording it can resolve.
+            item.deadline = resolve_deadline(item.deadline_text, meeting_date) or item.deadline
     return value
 
 
@@ -176,7 +201,7 @@ class LocalOllama:
                     try:
                         if data.get("done_reason") == "length":
                             raise ValueError("Output was truncated; return fewer, concise actions")
-                        value = validate_evidence(parse_extraction(raw), group, names)
+                        value = validate_evidence(parse_extraction(raw), group, names, meeting_date)
                         results.append(value)
                         break
                     except (ValidationError, ValueError) as exc:
