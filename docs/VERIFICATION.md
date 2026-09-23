@@ -140,3 +140,15 @@ review and hardening; the full suite was 47 tests at `91984e2`. Latest verified 
   Streamlit process had started (16:26) before that method was added and still held the
   old `minutes.models` module. A fresh `uv run streamlit run app.py` on port 8599
   started cleanly (health `ok`, HTTP 200).
+
+## Milestone 7 — Gemini 503 fallback (approximately 17:15 Astana)
+
+- Default `gemini-3.5-flash` kept; after its retries end in 503, one fallback to
+  `gemini-3.1-flash-lite`. No fallback for 400/401/403/429, blocked output, or an explicit
+  `GEMINI_MODEL`. The model that succeeded is stored in `transcript.model` (shown in the UI
+  and JSON) and a warning names the fallback.
+- Real call with `gemini-3.1-flash-lite` on `assets/demo/planning-ru-kk.wav`: 8 segments,
+  3 speakers, coherent timestamps, correct Kazakh lines, dates as digits.
+- `uv run pytest -q`: **98 passed** (mocked: 503 → fallback success and reported model,
+  explicit model not overridden, 400/401/403/429 and safety block never fall back).
+  `uv run ruff check .` passed.

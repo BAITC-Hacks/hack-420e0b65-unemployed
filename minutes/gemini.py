@@ -21,6 +21,9 @@ API = "https://generativelanguage.googleapis.com"
 # gemini-3.5-transcribe was tested and rejected: it ignores JSON mode, returns no speakers or
 # timestamps, and dropped the Kazakh lines of the demo. A general audio model is used instead.
 DEFAULT_MODEL = "gemini-3.5-flash"
+# Used once, only after the default model stays 503 UNAVAILABLE (high demand) through the
+# retries, and only if the user did not choose a model explicitly (GEMINI_MODEL / argument).
+FALLBACK_MODEL = "gemini-3.1-flash-lite"
 RETRY_STATUS = {429, 500, 503}
 RETRY_DELAY = 5.0
 INLINE_LIMIT = 14 * 1024 * 1024  # Requests above ~20 MB must use the Files API.
@@ -206,7 +209,9 @@ def parse_response(data: dict, duration: float, model: str) -> Transcript:
 
 def transcribe_gemini(audio: Path, model: str | None = None) -> Transcript:
     key = api_key()
+    explicit = bool(model or (os.getenv("GEMINI_MODEL") or "").strip())
     model = model or model_name()
+    models = [model] if explicit or model == FALLBACK_MODEL else [model, FALLBACK_MODEL]
     data, duration = to_wav(audio)
     if duration < 0.5:
         raise ValueError("No speech detected. Upload a recording with audible speech.")
@@ -235,12 +240,21 @@ def transcribe_gemini(audio: Path, model: str | None = None) -> Transcript:
                     "maxOutputTokens": 32768,
                 },
             }
-            for attempt in range(3):
-                response = client.post(f"/v1beta/models/{model}:generateContent", json=request)
-                if response.status_code not in RETRY_STATUS or attempt == 2:
-                    break
-                time.sleep(RETRY_DELAY * (attempt + 1))  # Transient overload / rate limit.
-            return parse_response(check(response).json(), duration, model)
+            for model in models:
+                for attempt in range(3):
+                    response = client.post(f"/v1beta/models/{model}:generateContent", json=request)
+                    if response.status_code not in RETRY_STATUS or attempt == 2:
+                        break
+                    time.sleep(RETRY_DELAY * (attempt + 1))  # Transient overload / rate limit.
+                if response.status_code != 503:
+                    break  # Auth, bad request, quota and safety errors never trigger fallback.
+            transcript = parse_response(check(response).json(), duration, model)
+            if model != models[0]:
+                transcript.warnings.append(
+                    f"{models[0]} was unavailable (503 high demand); transcribed with fallback "
+                    f"model {model}."
+                )
+            return transcript
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Gemini API unreachable: {type(exc).__name__}") from exc
         finally:

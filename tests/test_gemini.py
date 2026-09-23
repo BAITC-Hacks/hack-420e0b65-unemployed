@@ -113,3 +113,63 @@ def test_network_failure_is_wrapped(monkeypatch):
     mocked(monkeypatch, handler)
     with pytest.raises(RuntimeError, match="unreachable"):
         gemini.transcribe_gemini(Path("x.wav"))
+
+
+def overloaded_primary(calls):
+    def handler(request):
+        calls.append(request.url.path)
+        if gemini.DEFAULT_MODEL in request.url.path:
+            return httpx.Response(503, json={"error": {"message": "high demand"}})
+        return httpx.Response(200, json=response_body(SEGMENTS))
+
+    return handler
+
+
+def test_default_model_503_falls_back_once_and_reports_model(monkeypatch):
+    calls = []
+    mocked(monkeypatch, overloaded_primary(calls))
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    t = gemini.transcribe_gemini(Path("x.wav"))
+    assert calls == [f"/v1beta/models/{gemini.DEFAULT_MODEL}:generateContent"] * 3 + [
+        f"/v1beta/models/{gemini.FALLBACK_MODEL}:generateContent"
+    ]
+    assert t.model == gemini.FALLBACK_MODEL
+    assert any("fallback" in w and gemini.FALLBACK_MODEL in w for w in t.warnings)
+
+
+def test_explicit_model_choice_is_not_overridden(monkeypatch):
+    calls = []
+    mocked(monkeypatch, overloaded_primary(calls))
+    monkeypatch.setenv("GEMINI_MODEL", gemini.DEFAULT_MODEL)
+    with pytest.raises(RuntimeError, match="503"):
+        gemini.transcribe_gemini(Path("x.wav"))
+    assert all(gemini.FALLBACK_MODEL not in path for path in calls)
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 429])
+def test_non_overload_errors_never_fall_back(monkeypatch, status):
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(status, json={"error": {"message": "nope"}})
+
+    mocked(monkeypatch, handler)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    with pytest.raises(RuntimeError, match=str(status)):
+        gemini.transcribe_gemini(Path("x.wav"))
+    assert all(gemini.FALLBACK_MODEL not in path for path in calls)
+
+
+def test_blocked_primary_response_does_not_fall_back(monkeypatch):
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"promptFeedback": {"blockReason": "SAFETY"}})
+
+    mocked(monkeypatch, handler)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    with pytest.raises(RuntimeError, match="SAFETY"):
+        gemini.transcribe_gemini(Path("x.wav"))
+    assert len(calls) == 1

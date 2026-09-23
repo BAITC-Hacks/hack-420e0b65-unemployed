@@ -118,7 +118,11 @@ segments with speaker and start/end seconds. They are converted into the same
 extraction, deadlines, review and DOCX/PDF/JSON exports are unchanged. Local ONNX
 diarization is not applied in this mode. Timestamps are kept only if they are coherent
 (ordered, inside the recording); otherwise they are shown as 00:00:00 with a warning
-rather than invented. 429/5xx responses are retried twice. Missing key, API errors and
+rather than invented. 429/5xx responses are retried twice. If the default
+`gemini-3.5-flash` still answers **503 UNAVAILABLE / high demand**, the same audio is sent
+once to `gemini-3.1-flash-lite`; the transcript then shows `Model: gemini-3.1-flash-lite`
+and a warning naming the fallback. There is no fallback for auth, bad-request, quota (429)
+or safety errors, and none when you set `GEMINI_MODEL` yourself (your choice is kept). Missing key, API errors and
 network failures are shown as clean messages; the key is sent only in the
 `x-goog-api-key` header and never logged or shown.
 
@@ -328,7 +332,7 @@ All values are optional; defaults work. The only secret is the optional
 | `WHISPER_DEVICE` | `auto` | `auto`, `cuda` or `cpu` |
 | `MODEL_DIR` | `models` | Root of downloaded model files |
 | `GEMINI_API_KEY` | *(empty)* | Only for the optional cloud Gemini backend; keep it in `.env` (git-ignored) |
-| `GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model used by the cloud backend |
+| `GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model used by the cloud backend; setting it disables the automatic 503 fallback to `gemini-3.1-flash-lite` |
 
 ---
 

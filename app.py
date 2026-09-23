@@ -41,7 +41,9 @@ with st.sidebar:
         st.warning(
             f"**Cloud mode.** The uploaded audio is sent to Google Gemini API "
             f"(`{gemini_model()}`) for transcription. Requires `GEMINI_API_KEY` in `.env`. "
-            "Summary and action items are still extracted by local Ollama.",
+            "Summary and action items are still extracted by local Ollama. If the default model "
+            "is overloaded (503), it retries once with a lighter Gemini model; the model actually "
+            "used is shown with the transcript.",
             icon="☁️",
         )
     st.header("Local models")
