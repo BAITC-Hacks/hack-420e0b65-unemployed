@@ -1,0 +1,151 @@
+{
+  "tiny": {
+    "repo": "Systran/faster-whisper-tiny",
+    "revision": "d90ca5fe260221311c53c58e660288d3deb8d356",
+    "files": [
+      {
+        "rfilename": "README.md",
+        "blobId": "7e9bc5761a3e88762273fb1011479f2e501266c4",
+        "size": 1991
+      },
+      {
+        "rfilename": "config.json",
+        "blobId": "3baa18e2b321a2f489614607852a729fcd516480",
+        "size": 2249
+      },
+      {
+        "rfilename": "model.bin",
+        "blobId": "ee1fa0720a33a1e4a7b698cf5e4aacfcb360b99a",
+        "size": 75538270,
+        "lfs": {
+          "sha256": "dcb76c6586fc06cbdac6dd21f14cfd129cc4cdd9dce19bf4ffa62e59cbe6e6d1",
+          "size": 75538270,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "7818adb6de9fa3064d3ff81226fdd675be1f6344",
+        "size": 2203239
+      },
+      {
+        "rfilename": "vocabulary.txt",
+        "blobId": "c9074644d9d1205686f16d411564729461324b75",
+        "size": 459861
+      }
+    ]
+  },
+  "large-v3": {
+    "repo": "Systran/faster-whisper-large-v3",
+    "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+    "files": [
+      {
+        "rfilename": "README.md",
+        "blobId": "a84bfa7f20cac02ea5a99efa5eaf687ad58c1caf",
+        "size": 2052
+      },
+      {
+        "rfilename": "config.json",
+        "blobId": "75336feae814999bae6ccccdecf177639ffc6f9d",
+        "size": 2394
+      },
+      {
+        "rfilename": "model.bin",
+        "blobId": "e91bbba72de41ca3cdc9a656b17aa9407c7e85b6",
+        "size": 3087284237,
+        "lfs": {
+          "sha256": "69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1",
+          "size": 3087284237,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "preprocessor_config.json",
+        "blobId": "931c77a740890c46365c7ae0c9d350ba3cca908f",
+        "size": 340
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "3a5e2ba63acdcac9a19ba56cf9bd27f185bfff61",
+        "size": 2480617
+      },
+      {
+        "rfilename": "vocabulary.json",
+        "blobId": "0adcd01e7c237205d593b707e66dd5d7bc785d2d",
+        "size": 1068114
+      }
+    ]
+  },
+  "medium": {
+    "repo": "Systran/faster-whisper-medium",
+    "revision": "08e178d48790749d25932bbc082711ddcfdfbc4f",
+    "files": [
+      {
+        "rfilename": "README.md",
+        "blobId": "68a6ff5e20f337a8b4e27e4ea4cca73afb9a40fb",
+        "size": 2005
+      },
+      {
+        "rfilename": "config.json",
+        "blobId": "242aa06a480a7b5509375c645097e87af5136774",
+        "size": 2257
+      },
+      {
+        "rfilename": "model.bin",
+        "blobId": "89243526876c43bec8c06b4acd15713e45a79691",
+        "size": 1527906378,
+        "lfs": {
+          "sha256": "9b45e1009dcc4ab601eff815b61d80e60ce3fd8c74c1a14f4a282258286b51ae",
+          "size": 1527906378,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "7818adb6de9fa3064d3ff81226fdd675be1f6344",
+        "size": 2203239
+      },
+      {
+        "rfilename": "vocabulary.txt",
+        "blobId": "c9074644d9d1205686f16d411564729461324b75",
+        "size": 459861
+      }
+    ]
+  },
+  "small": {
+    "repo": "Systran/faster-whisper-small",
+    "revision": "536b0662742c02347bc0e980a01041f333bce120",
+    "files": [
+      {
+        "rfilename": "README.md",
+        "blobId": "16511f6106ead2fbc3a1480957a217c2661a5a98",
+        "size": 1998
+      },
+      {
+        "rfilename": "config.json",
+        "blobId": "e5047537059bd8f182d9ca64c470201585015187",
+        "size": 2370
+      },
+      {
+        "rfilename": "model.bin",
+        "blobId": "504a7fe023f19460564a623887a9f77ea53ac708",
+        "size": 483546902,
+        "lfs": {
+          "sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671",
+          "size": 483546902,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "7818adb6de9fa3064d3ff81226fdd675be1f6344",
+        "size": 2203239
+      },
+      {
+        "rfilename": "vocabulary.txt",
+        "blobId": "c9074644d9d1205686f16d411564729461324b75",
+        "size": 459861
+      }
+    ]
+  }
+}

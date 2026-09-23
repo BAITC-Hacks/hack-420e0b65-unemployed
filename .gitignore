@@ -1,0 +1,14 @@
+.venv/
+.python/
+.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+models/
+artifacts/
+.cache/
+.superpowers/
+*.egg-info/
+dist/
+build/
