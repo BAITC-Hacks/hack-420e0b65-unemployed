@@ -185,7 +185,7 @@ if meeting:
             {
                 "Responsible": a.responsible or "Not specified",
                 "Task": a.task,
-                "Deadline": str(a.deadline or a.deadline_text or "Not specified"),
+                "Deadline": a.display_deadline(),
                 "Status": a.display_status(),
                 "Evidence": a.evidence_quote,
                 "Segments": ", ".join(map(str, a.evidence_segment_ids)),

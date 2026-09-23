@@ -23,7 +23,7 @@ def action_rows(meeting: Meeting) -> list[list[str]]:
         [
             item.responsible or "Не указан / Белгісіз",
             item.task,
-            str(item.deadline or item.deadline_text or "Не указан / Белгісіз"),
+            item.display_deadline(),
             item.display_status(),
         ]
         for item in meeting.extraction.action_items

@@ -51,7 +51,7 @@ def test_action_dashboard_and_exports_render_with_unspecified_deadline():
         responsible=None,
         responsible_speaker=None,
         deadline=None,
-        deadline_text=None,
+        deadline_text="когда-нибудь потом",
         evidence_segment_ids=[0],
         evidence_quote="Проверить отчёт",
     )
@@ -72,6 +72,7 @@ def test_action_dashboard_and_exports_render_with_unspecified_deadline():
     app.run(timeout=20)
     assert not app.exception
     assert len(app.metric) == 3
+    assert list(app.dataframe[0].value["Deadline"]) == ["—"]
     assert len(app.get("download_button")) == 4
     next(button for button in app.button if button.label == "Save action updates").click().run()
     assert not app.exception

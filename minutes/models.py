@@ -60,6 +60,10 @@ class ActionItem(StrictModel):
     evidence_quote: str = Field(min_length=1)
     status: Literal["in progress", "completed"] = "in progress"
 
+    def display_deadline(self) -> str:
+        # Unresolved spoken wording (deadline_text) is evidence, not a calendar deadline.
+        return self.deadline.isoformat() if self.deadline else "—"
+
     def display_status(self, today: date | None = None) -> str:
         if self.status == "completed":
             return "completed"

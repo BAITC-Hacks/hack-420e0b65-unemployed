@@ -104,3 +104,11 @@ review and hardening; the full suite was 47 tests at `91984e2`. Latest verified 
   (“Жарайды, мен” → “Жар айтмейін”) and the model then used “Жар” as a responsible
   name for SPEAKER_02 before names were mapped. Mapping speaker names in the UI
   replaces it; human review remains required.
+
+## Milestone 5 — deadline display (approximately 16:35 Astana)
+
+- When the normalized `deadline` is null, the Streamlit action table, DOCX and PDF now
+  show `—`; unresolved spoken wording (`deadline_text`) is no longer displayed as if it
+  were a deadline (it remains in the JSON export and the evidence quote).
+- `uv run pytest -q`: **80 passed** (new export test; UI test asserts the `—` cell).
+  `uv run ruff check .` and `uv run ruff format --check .`: passed.

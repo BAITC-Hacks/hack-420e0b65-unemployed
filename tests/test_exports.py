@@ -69,6 +69,19 @@ def test_pdf_preserves_russian_and_all_kazakh_specific_letters():
         assert expected in text
 
 
+def test_unresolved_deadline_shows_dash_not_spoken_wording():
+    meeting = example_meeting()
+    item = meeting.extraction.action_items[0]
+    item.deadline, item.deadline_text = None, "когда-нибудь потом"
+    with ZipFile(BytesIO(export_docx(meeting))) as archive:
+        xml = archive.read("word/document.xml").decode()
+    pdf = PdfReader(BytesIO(export_pdf(meeting)))
+    pdf_text = "\n".join(page.extract_text() for page in pdf.pages)
+    for text in (xml, pdf_text):
+        assert "—" in text
+        assert "когда-нибудь потом" not in text
+
+
 def test_long_protocol_paginates_without_losing_last_segment():
     meeting = example_meeting()
     meeting.transcript.segments = [
