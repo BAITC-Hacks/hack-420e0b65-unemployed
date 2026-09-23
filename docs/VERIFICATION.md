@@ -166,3 +166,23 @@ review and hardening; the full suite was 47 tests at `91984e2`. Latest verified 
 - Real local Qwen: `scripts/verify_extraction.py` still 7 PASS; the hackathon question
   alone now yields no action. With the reply “Да, приду.” the model also created no
   action (conservative; attendance was not treated as a task).
+
+## Milestone 9 — long-transcript extraction reliability (approximately 17:35 Astana)
+
+- Real failure: a 4m34s Gemini transcript ended with “Ollama returned invalid minutes
+  after 3 attempts”. Reproduced locally with a 268 s, 40-segment, 3-speaker RU/KZ
+  transcript: Qwen paraphrased one Kazakh quote (“скриншоттарды” → “скриншоты”); the
+  all-or-nothing evidence check rejected all 6 actions, and at temperature 0 every
+  repair returned the same output, so all 3 attempts failed.
+- Fix (`minutes/extraction.py`): each action is verified on its own and only
+  unverifiable ones are dropped; if the JSON breaks the schema, the summary and
+  schema-valid actions are kept; a chunk that still fails after 3 attempts is named in
+  the summary (“Не обработано автоматически … сегменты X–Y”) instead of failing the
+  meeting (the error remains when no chunk succeeds); pronouns (“сам”, “я”, “мен”) are
+  never accepted as the responsible person.
+- Same real transcript after the fix: extraction succeeded with 5 verified actions.
+  `scripts/verify_extraction.py`: still 7 PASS.
+- `uv run pytest -q`: **110 passed** (new mocked regression: 48-segment multi-speaker
+  transcript, paraphrased quote + schema-invalid action + pronoun assignee in chunk one,
+  truncated JSON three times in chunk two → verified partial minutes with note).
+  Ruff passed.
