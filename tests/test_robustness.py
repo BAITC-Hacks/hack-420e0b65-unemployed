@@ -140,4 +140,4 @@ def test_undecodable_upload_reports_a_user_error_not_a_traceback(tmp_path, monke
 
 
 def test_normalize_ignores_yo_case_and_dash_style():
-    assert normalize("Отчёт — «Альфа»") == normalize("отчет - \"альфа\"")
+    assert normalize("Отчёт — «Альфа»") == normalize('отчет - "альфа"')
