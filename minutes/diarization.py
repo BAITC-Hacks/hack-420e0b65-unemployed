@@ -46,12 +46,15 @@ def assign_speakers(transcript: Transcript, turns: list[SpeakerTurn]) -> Transcr
             else:
                 groups.append((speaker, [word]))
         for speaker, words in groups:
+            text = " ".join(w.text for w in words if w.text).strip()
+            if not text:
+                continue  # Whitespace-only word tokens must not abort the whole meeting.
             rows.append(
                 Segment(
                     id=len(rows),
                     start=words[0].start,
                     end=words[-1].end,
-                    text=" ".join(w.text for w in words),
+                    text=text,
                     speaker=speaker,
                     words=words,
                 )

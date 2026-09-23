@@ -80,18 +80,48 @@ def diarization(root: Path):
     print(f"Diarization ready: {folder}", flush=True)
 
 
+# Optional offline Piper/VITS voices used only to synthesise the demo recording.
+DEMO_VOICES = {
+    "vits-piper-ru_RU-denis-medium": "efa4c18e0b5e32b81d1b6df36b9d312831e5d545200e27848ef926a4cd930300",
+    "vits-piper-ru_RU-irina-medium": "1fc0f54e5e084fe287c07909f2f6e0ba6d857864cf800e3ab80286a4e8233008",
+    "vits-piper-kk_KZ-issai-high": "6c59955f7f5e3fc50b130ced59a430eb4ef62d69155af4ce836db0dde4a42682",
+}
+
+
+def demo_voices(root: Path):
+    folder = root / "tts"
+    base = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/"
+    for name, sha in DEMO_VOICES.items():
+        if (folder / name / "tokens.txt").is_file():
+            print(f"Voice ready: {folder / name}", flush=True)
+            continue
+        archive = folder / f"{name}.tar.bz2"
+        download(base + f"{name}.tar.bz2", archive, sha)
+        with tarfile.open(archive, "r:bz2") as bundle:
+            bundle.extractall(folder, filter="data")
+        archive.unlink()
+        print(f"Voice ready: {folder / name}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--whisper", choices=["tiny", "small", "medium", "large-v3"])
     parser.add_argument("--diarization", action="store_true")
+    parser.add_argument(
+        "--demo-voices",
+        action="store_true",
+        help="Optional offline TTS voices for scripts/make_demo_audio.py",
+    )
     parser.add_argument("--model-dir", type=Path, default=Path("models"))
     args = parser.parse_args()
     if args.whisper:
         whisper(args.whisper, args.model_dir)
     if args.diarization:
         diarization(args.model_dir)
-    if not args.whisper and not args.diarization:
-        parser.error("Select --whisper MODEL and/or --diarization")
+    if args.demo_voices:
+        demo_voices(args.model_dir)
+    if not args.whisper and not args.diarization and not args.demo_voices:
+        parser.error("Select --whisper MODEL, --diarization and/or --demo-voices")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,9 @@ from pathlib import Path
 
 from minutes.models import Segment, Transcript, Word
 
+DECODE_ERROR = "AUDIO_DECODE_ERROR"
+TARGET_LANGUAGES = ("ru", "kk")
+
 
 def transcribe(
     audio: Path,
@@ -65,6 +68,11 @@ def transcribe(
                 )
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError("Transcription exceeded the 2-hour processing limit.") from exc
+            if DECODE_ERROR in result.stderr:
+                raise ValueError(
+                    "This file could not be decoded as audio. Upload a valid WAV, MP3, M4A, "
+                    "OGG, FLAC or MP4 recording."
+                )
             if result.returncode == 0 and result_path.exists():
                 transcript = Transcript.model_validate_json(result_path.read_text())
                 transcript.model = model
@@ -78,19 +86,32 @@ def transcribe(
     raise RuntimeError("No transcription backend available")
 
 
+def decode(engine, audio, language: str | None):
+    return engine.transcribe(
+        audio,
+        language=language,
+        beam_size=5,
+        vad_filter=False,
+        word_timestamps=True,
+        condition_on_previous_text=False,
+        multilingual=language is None,
+    )
+
+
 def recognize_regions(engine, samples, regions: list[dict], language: str | None):
     rows, languages = [], []
     for region in regions:
         offset = region["start"] / 16000
-        segments, info = engine.transcribe(
-            samples[region["start"] : region["end"]],
-            language=language,
-            beam_size=5,
-            vad_filter=False,
-            word_timestamps=True,
-            condition_on_previous_text=False,
-            multilingual=language is None,
-        )
+        audio = samples[region["start"] : region["end"]]
+        segments, info = decode(engine, audio, language)
+        if language is None and info.language not in TARGET_LANGUAGES:
+            # Short passages are sometimes detected as an unrelated language, which
+            # produces transliterated nonsense. This product only handles RU/KZ.
+            fallback = next(
+                (code for code in languages if code in TARGET_LANGUAGES),
+                "ru",
+            )
+            segments, info = decode(engine, audio, fallback)
         if info.language not in languages:
             languages.append(info.language)
         for segment in segments:
@@ -117,7 +138,10 @@ def worker(audio: str, model: str, device: str, language: str | None) -> Transcr
     from faster_whisper.vad import VadOptions, get_speech_timestamps
 
     onnxruntime.disable_telemetry_events()
-    samples = decode_audio(audio, sampling_rate=16000)
+    try:
+        samples = decode_audio(audio, sampling_rate=16000)
+    except Exception as exc:  # PyAV raises container-specific errors for unreadable media.
+        raise SystemExit(f"{DECODE_ERROR}: {type(exc).__name__}: {exc}") from exc
     duration = len(samples) / 16000
     if duration > 7200:
         raise ValueError("Recording exceeds the two-hour limit; split it into shorter meetings")

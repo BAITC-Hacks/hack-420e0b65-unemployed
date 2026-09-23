@@ -17,7 +17,17 @@ st.set_page_config(
     page_title="Alem Minutes — local meeting assistant", page_icon="🎙️", layout="wide"
 )
 st.title("Alem Minutes")
-st.caption("Локальный протокол встречи · Қазақша / Русский · Audio and text stay on this machine")
+st.caption("Локальный протокол встречи · Қазақша / Русский")
+st.success(
+    "**On-premise.** Audio, transcript and minutes never leave this machine: speech "
+    "recognition and diarization run in local processes, and the language model is reached "
+    "only over loopback. No cloud API, no account, no telemetry.",
+    icon="🔒",
+)
+st.caption(
+    "Demo flow: upload audio → 1. Transcribe locally (speakers included) → "
+    "name the speakers → 2. Extract summary and action items → export DOCX/PDF."
+)
 try:
     settings = Settings.load()
 except ValueError as exc:
@@ -38,16 +48,42 @@ with st.sidebar:
     language = st.selectbox("Speech language", ["Auto / mixed RU + KZ", "Russian", "Kazakh"])
     use_diarization = st.checkbox("Identify speaker turns (local ONNX)", value=True)
     num_speakers = st.number_input("Known number of speakers (0 = automatic)", 0, 20, 0)
+    auto_extract = st.checkbox(
+        "Extract minutes automatically after transcription",
+        value=True,
+        help="One-click demo. Turn off to map speaker names before the local model runs.",
+    )
     st.caption(f"Ollama: {settings.ollama_model}\n\n{settings.ollama_url}")
     if st.button("Check local Ollama"):
         try:
             LocalOllama(settings.ollama_url, settings.ollama_model).check_local_model()
             st.success("Local model ready")
         except (httpx.HTTPError, ValueError) as exc:
-            st.error(f"Local Ollama unavailable: {exc}")
+            st.error(
+                f"Local Ollama unavailable: {exc}. Run `ollama serve` and "
+                f"`ollama pull {settings.ollama_model}`."
+            )
     st.info(
         "Download models once using the README. Runtime never downloads models or calls cloud inference."
     )
+
+
+def run_extraction(meeting) -> None:
+    """Single place for local LLM minutes so the button and the one-click flow behave alike."""
+    try:
+        with st.spinner("Extracting summary and action items using local Ollama…"):
+            meeting.extraction = LocalOllama(settings.ollama_url, settings.ollama_model).extract(
+                meeting.transcript, meeting.meeting_date, meeting.speaker_names
+            )
+            st.session_state["editor_revision"] = st.session_state.get("editor_revision", 0) + 1
+    except httpx.HTTPError as exc:
+        st.error(
+            f"Local Ollama did not answer; the transcript is preserved. {exc}\n\n"
+            f"Start it with `ollama serve` and `ollama pull {settings.ollama_model}`."
+        )
+    except (ValueError, OSError) as exc:
+        st.error(f"Extraction failed; transcript is preserved. {exc}")
+
 
 title = st.text_input("Meeting title", "Рабочая встреча")
 meeting_date = st.date_input("Meeting date (for relative deadlines)", date.today())
@@ -94,6 +130,8 @@ if st.button("1. Transcribe locally", type="primary", disabled=upload is None):
                     transcript=transcript,
                     speaker_turns=turns,
                 )
+            if auto_extract and st.session_state.meeting.transcript.segments:
+                run_extraction(st.session_state.meeting)
         except (RuntimeError, ValueError, OSError) as exc:
             st.error(str(exc))
 
@@ -137,17 +175,7 @@ if meeting:
     if not meeting.transcript.segments:
         st.warning("No speech detected. Try a clearer recording.")
     if st.button("2. Extract summary and action items", disabled=not meeting.transcript.segments):
-        try:
-            with st.spinner("Extracting using local Ollama…"):
-                result = LocalOllama(settings.ollama_url, settings.ollama_model).extract(
-                    meeting.transcript,
-                    meeting.meeting_date,
-                    meeting.speaker_names,
-                )
-                meeting.extraction = result
-                st.session_state["editor_revision"] = st.session_state.get("editor_revision", 0) + 1
-        except (httpx.HTTPError, ValueError, OSError) as exc:
-            st.error(f"Extraction failed; transcript is preserved. {exc}")
+        run_extraction(meeting)
     if meeting.extraction:
         st.subheader("Meeting summary")
         st.write(meeting.extraction.summary)
