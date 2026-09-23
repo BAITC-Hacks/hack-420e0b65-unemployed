@@ -38,6 +38,18 @@ class Transcript(StrictModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class SpeakerTurn(StrictModel):
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+    speaker: str
+
+    @model_validator(mode="after")
+    def ordered(self):
+        if self.end < self.start:
+            raise ValueError("Speaker turn end must be after start")
+        return self
+
+
 class ActionItem(StrictModel):
     task: str = Field(min_length=1, max_length=2000)
     responsible: str | None
@@ -67,6 +79,7 @@ class Meeting(StrictModel):
     transcript: Transcript
     extraction: Extraction | None = None
     speaker_names: dict[str, str] = Field(default_factory=dict)
+    speaker_turns: list[SpeakerTurn] = Field(default_factory=list)
 
 
 def timestamp(seconds: float) -> str:

@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from minutes.config import Settings
+from minutes.diarization import assign_speakers, diarize
 from minutes.extraction import LocalOllama
 from minutes.models import Meeting
 from minutes.transcription import transcribe
@@ -19,6 +20,8 @@ def main():
     parser.add_argument("--model", default="tiny")
     parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
     parser.add_argument("--language", choices=["ru", "kk", "en"])
+    parser.add_argument("--diarize", action="store_true")
+    parser.add_argument("--speakers", type=int, default=0)
     parser.add_argument("--output", type=Path, default=Path("artifacts/smoke.json"))
     args = parser.parse_args()
     settings = Settings.load()
@@ -30,6 +33,13 @@ def main():
         print(warning)
     if not transcript.segments:
         raise SystemExit("No speech recognized; smoke failed")
+    turns = []
+    if args.diarize:
+        turns = diarize(args.audio, settings.model_dir, args.speakers)
+        if not turns:
+            raise SystemExit("No speaker turns detected; smoke failed")
+        transcript = assign_speakers(transcript, turns)
+        print(f"Diarization: {len(turns)} turns, {len({t.speaker for t in turns})} speakers")
     result = LocalOllama(settings.ollama_url, settings.ollama_model).extract(
         transcript, date(2026, 9, 23)
     )
@@ -38,6 +48,7 @@ def main():
         meeting_date=date(2026, 9, 23),
         transcript=transcript,
         extraction=result,
+        speaker_turns=turns,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(meeting.model_dump_json(indent=2), encoding="utf-8")

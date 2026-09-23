@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import tarfile
 import time
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -53,12 +54,44 @@ def whisper(name: str, root: Path):
     print(f"Whisper ready: {destination}", flush=True)
 
 
+def diarization(root: Path):
+    folder = root / "diarization"
+    base = "https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+    archive = folder / "segmentation.tar.bz2"
+    download(
+        base + "speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2",
+        archive,
+        "24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488",
+    )
+    with tarfile.open(archive, "r:bz2") as bundle:
+        member = bundle.getmember("sherpa-onnx-pyannote-segmentation-3-0/model.onnx")
+        with bundle.extractfile(member) as source:
+            (folder / "segmentation.onnx").write_bytes(source.read())
+        with bundle.extractfile("sherpa-onnx-pyannote-segmentation-3-0/LICENSE") as source:
+            (folder / "SEGMENTATION-LICENSE").write_bytes(source.read())
+    download(
+        base
+        + "speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
+        folder / "embedding.onnx",
+        "1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b",
+    )
+    manifest = {name: checksum(folder / name) for name in ("segmentation.onnx", "embedding.onnx")}
+    (folder / "checksums.json").write_text(json.dumps(manifest, indent=2))
+    print(f"Diarization ready: {folder}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--whisper", default="large-v3")
+    parser.add_argument("--whisper", choices=["tiny", "small", "medium", "large-v3"])
+    parser.add_argument("--diarization", action="store_true")
     parser.add_argument("--model-dir", type=Path, default=Path("models"))
     args = parser.parse_args()
-    whisper(args.whisper, args.model_dir)
+    if args.whisper:
+        whisper(args.whisper, args.model_dir)
+    if args.diarization:
+        diarization(args.model_dir)
+    if not args.whisper and not args.diarization:
+        parser.error("Select --whisper MODEL and/or --diarization")
 
 
 if __name__ == "__main__":

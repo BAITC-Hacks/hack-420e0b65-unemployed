@@ -8,3 +8,34 @@ def test_app_starts_without_models_or_audio():
     assert not app.exception
     assert app.title[0].value == "Alem Minutes"
     assert any(button.label == "1. Transcribe locally" and button.disabled for button in app.button)
+
+
+def test_mapping_updates_transcript_and_invalidates_old_minutes():
+    from datetime import date
+
+    from minutes.models import Extraction, Meeting, Segment, Transcript
+
+    meeting = Meeting(
+        title="Тест",
+        meeting_date=date(2026, 9, 23),
+        transcript=Transcript(
+            segments=[Segment(id=0, start=0, end=2, text="Я сделаю отчёт.", speaker="SPEAKER_00")],
+            language="ru",
+            duration=2,
+            device="cpu",
+            model="test fixture",
+        ),
+        extraction=Extraction(summary="Old anonymous summary", action_items=[]),
+    )
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.session_state["meeting"] = meeting
+    app.run(timeout=20)
+    next(field for field in app.text_input if field.label.startswith("SPEAKER_00")).set_value(
+        "Айгүл"
+    )
+    next(button for button in app.button if button.label == "Apply participant names").click().run()
+    assert not app.exception
+    updated = app.session_state["meeting"]
+    assert updated.speaker_names == {"SPEAKER_00": "Айгүл"}
+    assert updated.extraction is None
+    assert "Айгүл" in app.text_area[0].value

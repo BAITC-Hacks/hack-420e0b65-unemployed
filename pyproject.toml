@@ -9,6 +9,8 @@ dependencies = [
   "pydantic>=2.10,<3",
   "httpx>=0.28,<1",
   "python-dotenv>=1,<2",
+  "sherpa-onnx==1.13.8",
+  "sherpa-onnx-core==1.13.8",
 ]
 
 [project.optional-dependencies]

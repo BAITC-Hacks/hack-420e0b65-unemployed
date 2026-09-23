@@ -7,8 +7,9 @@ on representative recordings. No cloud inference or personal accounts required.
 
 ## Current milestone
 
-Streamlit upload, timestamped faster-whisper STT, validated Ollama extraction with
-retries, transcript/JSON downloads. Diarization and document export are next.
+Streamlit upload, timestamped faster-whisper STT, real sherpa-onnx speaker
+diarization, participant-name mapping, validated Ollama extraction with retries,
+transcript/JSON downloads. Document export is the next milestone.
 Actual verification results will be recorded in `docs/VERIFICATION.md`.
 
 ## Setup — Ubuntu / WSL2
@@ -21,7 +22,7 @@ without a separate ffmpeg executable. GPU is optional; CPU inference is slower.
 uv sync --python 3.12 --extra gpu
 cp .env.example .env
 ollama pull qwen3:4b-instruct-2507-q4_K_M
-uv run python scripts/download_models.py --whisper large-v3
+uv run python scripts/download_models.py --whisper large-v3 --diarization
 uv run streamlit run app.py
 ```
 
@@ -41,10 +42,14 @@ It exits before Ollama runs, freeing its GPU memory.
    Russian/Kazakh selection is available for monolingual recordings.
 3. Click **1. Transcribe locally**. Expect timestamps, text, actual device, or a
    clear missing-model/invalid-audio error.
-4. Click **2. Extract summary and action items**. Expect summary and action table
+4. Map anonymous SPEAKER labels to participant names in **Who is speaking?** and
+   apply names. Review the speaker timeline; labels are voice clusters, not known
+   identities. Set known speaker count in the sidebar if automatic clustering
+   merges/splits voices. Unmatched or equally overlapping voices remain UNKNOWN.
+5. Click **2. Extract summary and action items**. Expect summary and action table
    with source quotes/IDs. Missing people/deadlines stay unspecified. No tasks is
    a valid result. Review every AI draft against audio.
-5. Download transcript or JSON. Clear meeting from the session when finished.
+6. Download transcript or JSON. Clear meeting from the session when finished.
 
 For a spoken test, record “Айгуль, подготовь отчёт к 25 сентября 2026 года.
 Хорошо, я подготовлю отчёт к 25 сентября 2026 года.” Check the transcription,
@@ -54,15 +59,18 @@ recordings separately; a successful Russian test does not establish their qualit
 ```bash
 uv run pytest -q
 uv run ruff check .
+uv run python scripts/verify_extraction.py
 ```
 
 ## Architecture / privacy
 
-Streamlit → temporary local audio → isolated faster-whisper → typed Transcript →
-loopback Ollama → validated Extraction → UI/downloads.
+Streamlit → temporary local audio → isolated faster-whisper + CPU sherpa-onnx →
+word/timestamp-overlap speaker assignment → participant mapping → typed Transcript
+→ loopback Ollama → validated Extraction → UI/downloads.
 
 `minutes/models.py`: Pydantic contracts; `transcription.py`: local STT worker;
 `extraction.py`: local LLM/schema/evidence boundary; `config.py`: settings;
+`diarization.py`: local segmentation/embedding and speaker attribution;
 `app.py`: UI. Future conferencing adapters can feed audio into these same modules.
 Teams/Zoom/Meet integrations are not implemented.
 
@@ -84,7 +92,9 @@ OLLAMA_MODEL. No secrets needed. Initial model downloads are explicit setup step
 - Long transcripts are chunked; cross-boundary commitments may lose context.
   Summary is currently capped at 6000 characters.
 - Language detection does not prove mixed-language transcription quality.
-- MVP speaker labels and PDF/DOCX export are not implemented yet.
+- Speaker diarization can merge/split voices and struggle with cross-talk. Mapping
+  names is a human review step. Changing mappings clears old minutes for regeneration.
+- PDF/DOCX export is not implemented yet.
 
 ## Third-party disclosure
 
@@ -101,6 +111,9 @@ are third-party materials. Exact dependency versions are in `uv.lock`.
 | Pydantic / HTTPX / dotenv | [Pydantic](https://github.com/pydantic/pydantic) / [HTTPX](https://github.com/encode/httpx) / [dotenv](https://github.com/theskumar/python-dotenv) | MIT / BSD-3-Clause / BSD-3-Clause |
 | PyAV / bundled FFmpeg | [PyAV](https://github.com/PyAV-Org/PyAV) | BSD-3-Clause; bundled FFmpeg LGPL/GPL terms per distribution |
 | Optional CUDA libraries | [NVIDIA](https://docs.nvidia.com/cuda/) | NVIDIA redistribution terms |
+| sherpa-onnx and native runtime | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 |
+| pyannote segmentation 3.0 ONNX | [Public release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-segmentation-models) | MIT, CNRS; LICENSE included in downloaded archive |
+| 3D-Speaker ERes2Net embedding | [3D-Speaker](https://github.com/modelscope/3D-Speaker), [ONNX release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) | Apache-2.0 |
 
 See `docs/BRIEF.md` for requirements/scoring map. Respect component/model licenses
 when redistributing the application and its downloaded dependencies.

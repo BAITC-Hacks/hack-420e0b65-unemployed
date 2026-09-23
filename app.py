@@ -6,8 +6,9 @@ import httpx
 import streamlit as st
 
 from minutes.config import Settings
+from minutes.diarization import assign_speakers, diarize
 from minutes.extraction import LocalOllama
-from minutes.models import Meeting, transcript_text
+from minutes.models import Meeting, timestamp, transcript_text
 from minutes.transcription import transcribe
 
 st.set_page_config(
@@ -33,6 +34,8 @@ with st.sidebar:
         index=["auto", "cuda", "cpu"].index(settings.whisper_device),
     )
     language = st.selectbox("Speech language", ["Auto / mixed RU + KZ", "Russian", "Kazakh"])
+    use_diarization = st.checkbox("Identify speaker turns (local ONNX)", value=True)
+    num_speakers = st.number_input("Known number of speakers (0 = automatic)", 0, 20, 0)
     st.caption(f"Ollama: {settings.ollama_model}\n\n{settings.ollama_url}")
     if st.button("Check local Ollama"):
         try:
@@ -47,7 +50,9 @@ with st.sidebar:
 title = st.text_input("Meeting title", "Рабочая встреча")
 meeting_date = st.date_input("Meeting date (for relative deadlines)", date.today())
 upload = st.file_uploader(
-    "Upload meeting audio", type=["wav", "mp3", "mpeg", "m4a", "ogg", "flac", "mp4"]
+    "Upload meeting audio",
+    type=["wav", "mp3", "mpeg", "m4a", "ogg", "flac", "mp4"],
+    on_change=lambda: st.session_state.pop("meeting", None),
 )
 if upload:
     st.audio(upload)
@@ -69,22 +74,60 @@ if st.button("1. Transcribe locally", type="primary", disabled=upload is None):
                         device,
                         {"Russian": "ru", "Kazakh": "kk"}.get(language),
                     )
+                    turns = []
+                    if use_diarization and transcript.segments:
+                        try:
+                            with st.spinner("Finding speaker turns locally…"):
+                                turns = diarize(audio, settings.model_dir, int(num_speakers))
+                                transcript = assign_speakers(transcript, turns)
+                                if not turns:
+                                    transcript.warnings.append(
+                                        "No speaker turns detected; identities remain unknown."
+                                    )
+                        except (RuntimeError, ValueError, OSError) as exc:
+                            transcript.warnings.append(f"Diarization unavailable: {exc}")
                 st.session_state.meeting = Meeting(
                     title=title,
                     meeting_date=meeting_date,
                     transcript=transcript,
+                    speaker_turns=turns,
                 )
         except (RuntimeError, ValueError, OSError) as exc:
             st.error(str(exc))
 
 meeting = st.session_state.get("meeting")
 if meeting:
+    st.caption(f"Current result: {meeting.title} · {meeting.meeting_date}")
     for warning in meeting.transcript.warnings:
         st.warning(warning)
     st.caption(
         f"Model: {meeting.transcript.model} · Device: {meeting.transcript.device} · "
         f"Detected language: {meeting.transcript.language} · {meeting.transcript.duration:.1f} seconds"
     )
+    speakers = sorted({s.speaker for s in meeting.transcript.segments if s.speaker})
+    if speakers:
+        st.subheader("Who is speaking?")
+        st.caption(
+            "Voice clusters do not reveal real identities. Listen and map labels to participant names."
+        )
+        with st.form("speaker_names"):
+            names = {}
+            for speaker in speakers:
+                sample = next(s for s in meeting.transcript.segments if s.speaker == speaker)
+                value = st.text_input(
+                    f"{speaker} · {timestamp(sample.start)} · {sample.text[:80]}",
+                    value=meeting.speaker_names.get(speaker, ""),
+                    max_chars=100,
+                )
+                if value.strip():
+                    names[speaker] = value.strip()
+            if st.form_submit_button("Apply participant names"):
+                if names != meeting.speaker_names:
+                    meeting.speaker_names = names
+                    meeting.extraction = None
+                st.rerun()
+        with st.expander("Speaker timeline"):
+            st.dataframe([t.model_dump() for t in meeting.speaker_turns], hide_index=True)
     st.subheader("Timestamped transcript")
     text = transcript_text(meeting.transcript, meeting.speaker_names)
     st.text_area("Transcript", text, height=280, disabled=True)
