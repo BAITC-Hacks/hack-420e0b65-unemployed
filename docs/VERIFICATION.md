@@ -152,3 +152,17 @@ review and hardening; the full suite was 47 tests at `91984e2`. Latest verified 
 - `uv run pytest -q`: **98 passed** (mocked: 503 → fallback success and reported model,
   explicit model not overridden, 400/401/403/429 and safety block never fall back).
   `uv run ruff check .` passed.
+
+## Milestone 8 — questions and suggestions are not action items (approximately 17:25 Astana)
+
+- Real false positive: “Ты придёшь на завтрашний хакатон?” became the task
+  “Присутствовать на хакатоне завтра”. Fix: prompt rules plus a code check in
+  `validate_evidence` that drops an action whose quoted sentence is a question or a
+  tentative suggestion (“может быть”, “возможно”, “мүмкін”, …) unless cited evidence
+  shows acceptance/commitment (“да”, “хорошо”, “сделаю”, “жарайды”, “я/мен …”).
+- `uv run pytest -q`: **109 passed** (`tests/test_commitments.py`: question → none,
+  trimmed “?” → none, “Я приду завтра.” → kept, “Сделай отчёт к пятнице.” → kept,
+  “Может быть сделаем отчёт?” → none, accepted by “Да, я сделаю.” → kept). Ruff passed.
+- Real local Qwen: `scripts/verify_extraction.py` still 7 PASS; the hackathon question
+  alone now yields no action. With the reply “Да, приду.” the model also created no
+  action (conservative; attendance was not treated as a task).

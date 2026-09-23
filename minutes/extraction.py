@@ -20,6 +20,10 @@ responsible_speaker (SPEAKER_XX only when that speaker takes responsibility, oth
 deadline (YYYY-MM-DD or null); deadline_text (original deadline words or null);
 evidence_segment_ids (source IDs); evidence_quote (exact verbatim quote from a source segment);
 status (always "in progress"). Do not confuse a person assigning a task with the assignee.
+An action item needs evidence of a commitment ("я сделаю", "мен дайындаймын"), an assignment
+or imperative ("сделай", "подготовьте"), or acceptance of a proposal ("да, сделаю",
+"жарайды"). A question ("Ты придёшь завтра?") or a suggestion/possibility ("может быть
+сделаем") is NOT an action item unless someone clearly accepts it; then cite both segments.
 For "I will" use the speaking person's mapped name if available, otherwise their speaker label.
 Resolve relative deadlines from the supplied meeting date and weekday ("завтра", "на следующей
 неделе", "жұмаға дейін"). If you cannot derive the exact calendar date with certainty, set
@@ -77,6 +81,44 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+TENTATIVE = re.compile(
+    r"(?<!\w)(?:может быть|может|возможно|можно было бы|а что если|а если|давайте подумаем"
+    r"|мүмкін|бәлкім|мүмкін болар)(?!\w)"
+)
+ACCEPTANCE = re.compile(
+    r"(?<!\w)(?:да|хорошо|ладно|ок|окей|договорились|конечно|согласен|согласна|беру|сделаю"
+    r"|я|мы|мен|біз|иә|жарайды|келістік|болады|мақұл)(?!\w)"
+)
+
+
+def sentence_at(text: str, start: int, end: int) -> str:
+    """The full sentence(s) around a quote, so a trimmed "?" still counts as a question."""
+    left = max(text.rfind(mark, 0, start) for mark in ".!?") + 1
+    stops = [i for i in (text.find(mark, end) for mark in ".!?") if i != -1]
+    return text[left : (min(stops) + 1 if stops else len(text))].strip()
+
+
+def is_tentative(sentence: str) -> bool:
+    return sentence.endswith("?") or bool(TENTATIVE.search(sentence))
+
+
+def has_commitment(quote: str, sources: list[str]) -> bool:
+    """Reject questions and suggestions unless cited evidence shows them being accepted."""
+    quoted = [(text, text.find(quote)) for text in sources if quote in text]
+    if not quoted:
+        return True
+    text, start = quoted[0]
+    sentence = sentence_at(text, start, start + len(quote))
+    if not is_tentative(sentence):
+        return True
+    rest = " ".join(sources).replace(sentence, " ", 1)
+    return any(
+        ACCEPTANCE.search(part) and not is_tentative(part.strip())
+        for part in re.split(r"(?<=[.!?])\s+", rest)
+        if part.strip()
+    )
+
+
 def validate_evidence(
     value: Extraction,
     segments: list[Segment],
@@ -85,6 +127,7 @@ def validate_evidence(
 ):
     indexed = {s.id: s for s in segments}
     speakers = {s.speaker for s in segments if s.speaker}
+    rejected = []
     for item in value.action_items:
         if any(i not in indexed for i in item.evidence_segment_ids):
             raise ValueError("Action cites an unknown segment ID")
@@ -93,6 +136,9 @@ def validate_evidence(
         quote = normalize(item.evidence_quote)
         if not any(quote in text for text in sources):
             raise ValueError("Action evidence_quote must be verbatim in a cited segment")
+        if not has_commitment(quote, sources):
+            rejected.append(item)  # A question or unaccepted suggestion is not a task.
+            continue
         if item.responsible_speaker and item.responsible_speaker not in speakers:
             raise ValueError("Action references an unknown speaker")
         if item.responsible_speaker and item.responsible_speaker not in {s.speaker for s in cited}:
@@ -117,6 +163,7 @@ def validate_evidence(
                 item.deadline_text = find_deadline_phrase(" ".join(sources), meeting_date)
             # Code, not the model, counts weekdays for relative wording it can resolve.
             item.deadline = resolve_deadline(item.deadline_text, meeting_date) or item.deadline
+    value.action_items = [a for a in value.action_items if all(a is not r for r in rejected)]
     return value
 
 
