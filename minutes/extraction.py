@@ -8,7 +8,7 @@ import httpx
 from pydantic import ValidationError
 
 from minutes.config import local_ollama_url
-from minutes.deadlines import find_deadline_phrase, resolve_deadline
+from minutes.deadlines import evidence_deadline_text, resolve_deadline
 from minutes.models import ActionItem, Extraction, Segment, Transcript, transcript_text
 
 SYSTEM = """You extract meeting minutes from Russian, Kazakh or mixed Russian/Kazakh speech.
@@ -193,8 +193,9 @@ def validate_evidence(
                 item.responsible or item.responsible_speaker
             )
         if meeting_date:
-            if not item.deadline_text and not item.deadline:
-                item.deadline_text = find_deadline_phrase(" ".join(sources), meeting_date)
+            item.deadline_text = evidence_deadline_text(
+                item.deadline_text, " ".join(sources), bool(item.deadline), meeting_date
+            )
             # Code, not the model, counts weekdays for relative wording it can resolve.
             item.deadline = resolve_deadline(item.deadline_text, meeting_date) or item.deadline
     value.action_items = [a for a in value.action_items if all(a is not r for r in rejected)]

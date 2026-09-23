@@ -186,3 +186,14 @@ review and hardening; the full suite was 47 tests at `91984e2`. Latest verified 
   transcript, paraphrased quote + schema-invalid action + pronoun assignee in chunk one,
   truncated JSON three times in chunk two → verified partial minutes with note).
   Ruff passed.
+
+## Milestone 10 — Kazakh “ертеңге дейін” deadline (approximately 17:45 Astana)
+
+- `resolve_deadline` already mapped “ертеңге дейін” / “ертең” → meeting date + 1 and
+  “бүгін” → meeting date. The real 2026-09-23 result came from the model: for the quote
+  “…іске қосып көремін, ертеңге дейін” it copied `deadline_text` “до шести” from another
+  action and set 2026-09-23. Fix: `evidence_deadline_text` (in `minutes/deadlines.py`)
+  uses resolvable wording from the cited evidence when the model's `deadline_text` is
+  not in that evidence. Same real transcript now: 2026-09-24, `deadline_text`
+  “ертеңге дейін”; other deadlines unchanged. `scripts/verify_extraction.py`: 7 PASS.
+- `uv run pytest -q`: **117 passed**; ruff passed.

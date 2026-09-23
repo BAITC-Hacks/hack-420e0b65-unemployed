@@ -82,3 +82,21 @@ def find_deadline_phrase(text: str, meeting_date: date) -> str | None:
         if resolve_deadline(match.group(0), meeting_date):
             return text[start:end]
     return None
+
+
+def evidence_deadline_text(
+    text: str | None, evidence: str, has_date: bool, meeting_date: date
+) -> str | None:
+    """Prefer deadline wording actually present in the cited evidence.
+
+    The model sometimes copies a neighbouring action's deadline_text ("до шести") while the
+    cited quote says "ертеңге дейін"; the wording in the evidence is then authoritative.
+    """
+    if resolve_deadline(text, meeting_date):
+        return text
+    folded = (text or "").casefold().replace("ё", "е")
+    if (text and folded not in evidence.casefold().replace("ё", "е")) or (
+        not text and not has_date
+    ):
+        return find_deadline_phrase(evidence, meeting_date) or text
+    return text

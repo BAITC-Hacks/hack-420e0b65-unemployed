@@ -175,3 +175,49 @@ def test_overlapping_turns_assign_by_larger_share_per_word():
         ("Я сделаю,", "SPEAKER_00"),
         ("хорошо.", "SPEAKER_01"),
     ]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("ертеңге дейін", date(2026, 9, 24)),
+        ("Ертеңге дейін", date(2026, 9, 24)),
+        ("ертең", date(2026, 9, 24)),
+        ("бүгін", date(2026, 9, 23)),
+        ("бүгінге дейін", date(2026, 9, 23)),
+    ],
+)
+def test_kazakh_tomorrow_and_today(text, expected):
+    assert resolve_deadline(text, WEDNESDAY) == expected
+
+
+def test_evidence_wording_beats_copied_deadline_text():
+    # Real failure: model copied "до шести" from another action and dated it today.
+    segments = [
+        Segment(
+            id=0,
+            start=0,
+            end=4,
+            text="Мен README бойынша таза ортада іске қосып көремін, ертеңге дейін.",
+        )
+    ]
+    value = action(
+        deadline=date(2026, 9, 23),
+        deadline_text="до шести",
+        evidence_quote="іске қосып көремін, ертеңге дейін",
+    )
+    item = validate_evidence(value, segments, {}, WEDNESDAY).action_items[0]
+    assert item.deadline == date(2026, 9, 24)
+    assert item.deadline_text == "ертеңге дейін"
+
+
+def test_model_deadline_kept_when_its_wording_is_in_evidence():
+    segments = [Segment(id=0, start=0, end=3, text="Я подготовлю отчёт до шести, не завтра.")]
+    value = action(
+        deadline=date(2026, 9, 23),
+        deadline_text="до шести",
+        evidence_quote="подготовлю отчёт до шести",
+    )
+    assert validate_evidence(value, segments, {}, WEDNESDAY).action_items[0].deadline == date(
+        2026, 9, 23
+    )
